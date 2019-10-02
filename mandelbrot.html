@@ -110,10 +110,6 @@
          var up = false;
          var down = false;
 
-         var mx = 0;
-         var my = 0;
-         var zoom = 0;
-
          function keydownhandler (event) {
              switch(event.keyCode) {
                  case 37:
@@ -273,16 +269,7 @@
              ymax += dy*scale;
              changed = true;
          }
-         function zoomin(factor) {
-             var xmean = 0.5*(xmin+xmax);
-             var ymean = 0.5*(ymin+ymax);
-             xmin = (xmin - xmean)*Math.exp(-factor)+xmean;
-             xmax = (xmax - xmean)*Math.exp(-factor)+xmean;
-             ymin = (ymin - ymean)*Math.exp(-factor)+ymean;
-             ymax = (ymax - ymean)*Math.exp(-factor)+ymean;
-             changed = true;
-         }
-         function zoomout(factor) {
+         function zoom(factor) {
              var xmean = 0.5*(xmin+xmax);
              var ymean = 0.5*(ymin+ymax);
              xmin = (xmin - xmean)*Math.exp(factor)+xmean;
@@ -319,10 +306,10 @@
 
              //keyboard state handling
              if(space && !shift) {
-                 zoomin(elapsed_s*1);
+                 zoom(-elapsed_s*1);
              }
-             else if(shift && !space) {
-                 zoomout(elapsed_s*1);
+             else if(!space && shift) {
+                 zoom(elapsed_s*1);
              }
 
              if(left && !right) {
@@ -364,8 +351,8 @@
         </script>
         <br/>
         <input type="button" value="Reset" onclick="reset(0.2);"/>
-        <input type="button" value="Zoom in" onclick="zoomin(0.2);"/>
-        <input type="button" value="Zoom out" onclick="zoomout(0.2);"/>
+        <input type="button" value="Zoom in" onclick="zoom(-0.2);"/>
+        <input type="button" value="Zoom out" onclick="zoom(0.2);"/>
         <input type="button" value="Left" onclick="pan(-0.05,0.0);"/>
         <input type="button" value="Right" onclick="pan(0.05,0.0);"/>
         <input type="button" value="Down" onclick="pan(0.0,-0.05);"/>
