@@ -1,0 +1,374 @@
+<html>
+    <head></head>
+    <body>
+        <p>Click the plot to use keyboard arrow keys (pan), space bar (zoom in), and shift (zoom out).</p>
+        <canvas id="canvas" width="800" height="800" tabindex='1'>
+            Error text in case canvas isn't available.
+        </canvas>
+        <!-- vertex shader -->
+        <script id="vert.glsl" type="text/glsl">
+         attribute vec3 corner;
+
+         varying vec3 position;
+
+         void main() {
+             position = corner;
+             gl_Position = vec4(corner[0], corner[1], corner[2], 1);
+             return;
+         }
+
+        </script>
+        <!-- fragment shader -->
+        <script id="frag.glsl" type="text/glsl">
+         //precision mediump float;
+         precision highp float;
+
+         varying vec3 position;
+
+         //I wanted a variable number of maxiter, but it turns out that at
+         //least my GPU doesn't support variable for-loop termination, and even
+         //only supports small constant values for termination.  In my case,
+         //the for-loop termination value seems to even depend on the nature of
+         //the computation.  If I use floats to compute the mandelbrot set,
+         //then I might get up to 348 iterations before the shader fails and
+         //produces garbage, but with doubles I only get 182.
+         //
+         //const int maxiter = 348;
+         //const int maxiter = 182;
+         const int maxiter = 300;
+         //const int maxiter = 10;
+         // uniform int maxiter;
+         //uniform float boundary;
+         //uniform vec4 xyminmax;
+         uniform float xmin; //0
+         uniform float xmax; //1
+         uniform float ymin; //2
+         uniform float ymax; //3
+
+         const float boundary = 2.0;
+         //const vec4 xyminmax = vec4(-2.5, 1.5, -2.0, 2.0);
+         //const float xmin = -2.5;
+         //const float xmax = 1.5;
+         //const float ymin = -2.0;
+         //const float ymax = 2.0;
+
+         float mandelbrot(float x, float y) {
+             float zx = 0.0;
+             float zy = 0.0;
+             float b = boundary*boundary;
+             int index;
+             float tmpx, tmpy, n;
+             for(int i = 0; i <= maxiter; ++i) {
+                 index = i;
+                 tmpx = x + zx*zx - zy*zy;
+                 tmpy = y + 2.0*zx*zy;
+                 zx = tmpx;
+                 zy = tmpy;
+                 n = zx*zx + zy*zy;
+                 if(n > b) {
+                     break;
+                 }
+             }
+             return float(index)/float(maxiter+1);
+         }
+         
+         vec3 jet(float t)
+         {
+             return clamp(vec3(1.5) - abs(4.0 * vec3(t) + vec3(-3, -2, -1)), vec3(0), vec3(1));
+         }
+         
+         void main() {
+             float x = 0.5*(position[0]+1.0)*(xmax-xmin)+xmin;
+             float y = 0.5*(position[1]+1.0)*(ymax-ymin)+ymin;
+             float m = mandelbrot(x, y);
+             //gl_FragColor = vec4(m,m,m,1.0);
+             gl_FragColor = vec4(jet(m),1.0);
+         }
+
+        </script>
+        <!-- JavaScript -->
+        <script>
+
+         //Detect touch screen
+         function is_touch_device() {
+             return ('ontouchstart' in window);
+         }
+         /* function is_touch_device() {
+          *     return (('ontouchstart' in window)
+          *          || (navigator.MaxTouchPoints > 0)
+          *          || (navigator.msMaxTouchPoints > 0));
+          * } */
+         //if (!is_touch_device()) {
+         //  document.getElementById('touchOnly').style.display='none';
+         //}
+
+         //Keyboard input handling
+         var space = false;
+         var shift = false;
+         var left = false;
+         var right = false;
+         var up = false;
+         var down = false;
+
+         var mx = 0;
+         var my = 0;
+         var zoom = 0;
+
+         function keydownhandler (event) {
+             switch(event.keyCode) {
+                 case 37:
+                     left = true;
+                     break;
+                 case 39:
+                     right = true;
+                     break;
+                 case 38:
+                     up = true;
+                     break;
+                 case 40:
+                     down = true;
+                     break;
+                 case 32:
+                     space = true;
+                     break;
+                 case 16:
+                     shift = true;
+                     break;
+             }
+         }
+         
+         function keyuphandler (event) {
+             switch(event.keyCode) {
+                 case 37:
+                     left = false;
+                     break;
+                 case 39:
+                     right = false;
+                     break;
+                 case 38:
+                     up = false;
+                     break;
+                 case 40:
+                     down = false;
+                     break;
+                 case 32:
+                     space = false;
+                     break;
+                 case 16:
+                     shift = false;
+                     break;
+             }
+         }
+         
+         //function to create shaders
+         function createShader(gl, type, source) {
+             var shader = gl.createShader(type);
+             gl.shaderSource(shader, source);
+             gl.compileShader(shader);
+             var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+             if (success) {
+                 return shader;
+             }
+             console.log(gl.getShaderInfoLog(shader));
+             gl.deleteShader(shader);
+         }
+
+         var corners = [1.0, 1.0, 0.0,
+                       -1.0, 1.0, 0.0,
+                       -1.0, -1.0, 0.0,
+
+                       -1.0, -1.0, 0,
+                        1.0, -1.0, 0.0,
+                        1.0, 1.0, 0.0];
+
+         var canvas = document.getElementById("canvas");
+         var gl = canvas.getContext("webgl");
+
+         canvas.addEventListener('keydown',keydownhandler);
+         canvas.addEventListener('keyup',keyuphandler);
+
+         //Compile shaders
+         var vertexShaderSource = document.getElementById("vert.glsl").text;
+         var fragmentShaderSource = document.getElementById("frag.glsl").text;
+
+         var vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+         var fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+         //alert(fragmentShader);
+         /* function createProgram(gl, vertexShader, fragmentShader) {
+          *     var program = gl.createProgram();
+          *     gl.attachShader(program, vertexShader);
+          *     gl.attachShader(program, fragmentShader);
+          *     gl.linkProgram(program);
+          *     var success = gl.getProgramParameter(program, gl.LINK_STATUS);
+          *     if (success) {
+          *         return program;
+          *     }
+          *
+          *     console.log(gl.getProgramInfoLog(program));
+          *     gl.deleteProgram(program);
+          * }
+          *
+          * var program = createProgram(gl, vertexShader, fragmentShader); */
+         var program = gl.createProgram();
+         gl.attachShader(program, vertexShader);
+         gl.attachShader(program, fragmentShader);
+         var vao_ext = gl.getExtension("OES_vertex_array_object");
+         var vao = vao_ext.createVertexArrayOES();
+         vao_ext.bindVertexArrayOES(vao);
+         var vbo = gl.createBuffer();
+         gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(corners),gl.STATIC_DRAW);
+         gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+         gl.enableVertexAttribArray(0);
+
+         gl.bindAttribLocation(program,0,"corner");
+         gl.linkProgram(program);
+         gl.validateProgram(program);
+
+         //render settings
+         gl.clearColor(0, 0, 0, 1);
+         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+         gl.cullFace(gl.BACK);
+         gl.frontFace(gl.CCW);
+         gl.enable(gl.CULL_FACE);
+         gl.enable(gl.DEPTH_TEST);
+
+         //Uniforms
+         var boundary_loc = gl.getUniformLocation(program,"boundary");
+         //var xyminmax_loc = gl.getUniformLocation(program,"xyminmax");
+         var xmin_loc = gl.getUniformLocation(program,"xmin");
+         var xmax_loc = gl.getUniformLocation(program,"xmax");
+         var ymin_loc = gl.getUniformLocation(program,"ymin");
+         var ymax_loc = gl.getUniformLocation(program,"ymax");
+
+         var boundary = 2.0;
+         //var xyminmax = [-2.5, 2.0, -2.0, 2.0];
+         var xmin = -2.5;
+         var xmax = 1.5;
+         var ymin = -2.0;
+         var ymax = 2.0;
+
+         gl.useProgram(program);
+         gl.uniform1f(boundary_loc,boundary);
+         //gl.uniform4f(xyminmax_loc,xmin,xmax,ymin,ymax);
+         gl.uniform1f(xmin_loc,xmin);
+         gl.uniform1f(xmax_loc,xmax);
+         gl.uniform1f(ymin_loc,ymin);
+         gl.uniform1f(ymax_loc,ymax);
+
+         //camera handling
+         var changed = true;
+         function reset() {
+             xmin = -2.5;
+             xmax = 1.5;
+             ymin = -2.0;
+             ymax = 2.0;
+             changed = true;
+         }
+         function pan(dx, dy) {
+             var scale=(xmax-xmin);
+             xmin += dx*scale;
+             xmax += dx*scale;
+             ymin += dy*scale;
+             ymax += dy*scale;
+             changed = true;
+         }
+         function zoomin(factor) {
+             var xmean = 0.5*(xmin+xmax);
+             var ymean = 0.5*(ymin+ymax);
+             xmin = (xmin - xmean)*Math.exp(-factor)+xmean;
+             xmax = (xmax - xmean)*Math.exp(-factor)+xmean;
+             ymin = (ymin - ymean)*Math.exp(-factor)+ymean;
+             ymax = (ymax - ymean)*Math.exp(-factor)+ymean;
+             changed = true;
+         }
+         function zoomout(factor) {
+             var xmean = 0.5*(xmin+xmax);
+             var ymean = 0.5*(ymin+ymax);
+             xmin = (xmin - xmean)*Math.exp(factor)+xmean;
+             xmax = (xmax - xmean)*Math.exp(factor)+xmean;
+             ymin = (ymin - ymean)*Math.exp(factor)+ymean;
+             ymax = (ymax - ymean)*Math.exp(factor)+ymean;
+             changed = true;
+         }
+
+         //finally draw
+
+         //cross platform animation frame request
+         window.requestAnimFrame = function() {
+             return window.requestAnimationFrame ||
+                    window.webkitRequestAnimationFrame ||
+                    window.mozRequestAnimationFrame ||
+                    window.oRequestAnimationFrame ||
+                    window.msRequestAnimationFrame ||
+                    function(callback, element) {
+                        return window.setTimeout (callback, 1000 / 60);
+                    }
+         };
+         var primitiveType = gl.TRIANGLES;
+         var offset = 0;
+         var count = 6;
+         var last_ms = performance.now();
+
+         function main_loop() {
+             //handle timers
+             var current_ms = performance.now();
+             var elapsed_ms = current_ms - last_ms;
+             var elapsed_s = elapsed_ms/1000.0;
+             last_ms = current_ms;
+
+             //keyboard state handling
+             if(space && !shift) {
+                 zoomin(elapsed_s*1);
+             }
+             else if(shift && !space) {
+                 zoomout(elapsed_s*1);
+             }
+
+             if(left && !right) {
+                 pan(-1*elapsed_s,0);
+             }
+             else if(!left && right) {
+                 pan(1*elapsed_s,0);
+             }
+
+             if(down && !up) {
+                 pan(0,-1*elapsed_s);
+             }
+             else if(!down && up) {
+                 pan(0,1*elapsed_s,0);
+             }
+             
+             //handle uniforms
+             if(changed) {
+                 //alert("changed");
+                 gl.uniform1f(boundary_loc,boundary);
+                 //gl.uniform4f(xyminmax_loc,xmin,xmax,ymin,ymax);
+                 gl.uniform1f(xmin_loc,xmin);
+                 gl.uniform1f(xmax_loc,xmax);
+                 gl.uniform1f(ymin_loc,ymin);
+                 gl.uniform1f(ymax_loc,ymax);
+                 changed = false;
+             }
+
+             //finally draw
+             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+             vao_ext.bindVertexArrayOES(vao);
+             gl.drawArrays(primitiveType, offset, count);
+             //and keep drawing
+             //window.requestAnimFrame(main_loop, canvas);
+             window.requestAnimationFrame(main_loop,canvas);
+         }
+
+         main_loop();
+        </script>
+        <br/>
+        <input type="button" value="Reset" onclick="reset(0.2);"/>
+        <input type="button" value="Zoom in" onclick="zoomin(0.2);"/>
+        <input type="button" value="Zoom out" onclick="zoomout(0.2);"/>
+        <input type="button" value="Left" onclick="pan(-0.05,0.0);"/>
+        <input type="button" value="Right" onclick="pan(0.05,0.0);"/>
+        <input type="button" value="Down" onclick="pan(0.0,-0.05);"/>
+        <input type="button" value="Up" onclick="pan(0.0,0.05);"/>
+    </body>
+</html>
